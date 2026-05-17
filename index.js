@@ -122,6 +122,41 @@ app.get('/api/tutors', async (req, res) => {
   }
 });
 
+app.get('/api/tutors/my', authenticateToken, async (req, res) => {
+  try {
+    const userEmail = req.user.email;
+
+    const tutors = await tutorsCollection
+      .find({ creatorEmail: userEmail })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json(tutors);
+  } catch (error) {
+    console.error('Error fetching user tutors:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.get('/api/tutors/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Tutor ID format' });
+    }
+
+    const tutor = await tutorsCollection.findOne({ _id: new ObjectId(id) });
+    if (!tutor) {
+      return res.status(404).json({ message: 'Tutor not found' });
+    }
+
+    res.status(200).json(tutor);
+  } catch (error) {
+    console.error('Error fetching tutor details:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
