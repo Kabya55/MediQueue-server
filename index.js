@@ -89,6 +89,39 @@ app.get('/', (req, res) => {
   res.status(200).send('MediQueue backend is running smoothly!');
 });
 
+app.get('/api/tutors', async (req, res) => {
+  try {
+    const { search, startDate, endDate, limit } = req.query;
+    let query = {};
+
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+
+    if (startDate || endDate) {
+      query.sessionStartDate = {};
+      if (startDate) {
+        query.sessionStartDate.$gte = startDate;
+      }
+      if (endDate) {
+        query.sessionStartDate.$lte = endDate;
+      }
+    }
+
+    let cursor = tutorsCollection.find(query);
+
+    if (limit) {
+      cursor = cursor.limit(parseInt(limit));
+    }
+
+    const tutors = await cursor.sort({ createdAt: -1 }).toArray();
+    res.status(200).json(tutors);
+  } catch (error) {
+    console.error('Error fetching tutors:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
