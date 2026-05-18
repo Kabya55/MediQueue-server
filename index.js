@@ -198,6 +198,75 @@ app.post('/api/tutors', authenticateToken, async (req, res) => {
   }
 });
 
+app.patch('/api/tutors/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Tutor ID format' });
+    }
+
+    const tutor = await tutorsCollection.findOne({ _id: new ObjectId(id) });
+    if (!tutor) {
+      return res.status(404).json({ message: 'Tutor not found' });
+    }
+
+    if (tutor.creatorEmail !== req.user.email) {
+      return res.status(403).json({ message: 'You are not authorized to update this tutor' });
+    }
+
+    const updates = {};
+    const allowedFields = [
+      'name', 'photoUrl', 'subject', 'availableDays', 'availableTime', 
+      'hourlyFee', 'totalSlot', 'sessionStartDate', 'sessionEndDate', 
+      'institution', 'experience', 'location', 'teachingMode'
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === 'hourlyFee') {
+          updates[field] = parseFloat(req.body[field]);
+        } else if (field === 'totalSlot') {
+          updates[field] = parseInt(req.body[field]);
+        } else if (field === 'availableDays') {
+          updates[field] = Array.isArray(req.body[field]) ? req.body[field] : [req.body[field]];
+        } else {
+          updates[field] = req.body[field];
+        }
+      }
+    });
+
+    await tutorsCollection.updateOne({ _id: new ObjectId(id) }, { $set: updates });
+    res.status(200).json({ message: 'Tutor details updated successfully!' });
+  } catch (error) {
+    console.error('Error updating tutor:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.delete('/api/tutors/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Tutor ID format' });
+    }
+
+    const tutor = await tutorsCollection.findOne({ _id: new ObjectId(id) });
+    if (!tutor) {
+      return res.status(404).json({ message: 'Tutor not found' });
+    }
+
+    if (tutor.creatorEmail !== req.user.email) {
+      return res.status(403).json({ message: 'You are not authorized to delete this tutor' });
+    }
+
+    await tutorsCollection.deleteOne({ _id: new ObjectId(id) });
+    res.status(200).json({ message: 'Tutor deleted successfully!' });
+  } catch (error) {
+    console.error('Error deleting tutor:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
