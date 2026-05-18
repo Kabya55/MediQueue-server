@@ -267,6 +267,114 @@ app.delete('/api/tutors/:id', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/bookings', authenticateToken, async (req, res) => {
+  try {
+    const studentEmail = req.user.email;
+
+    const bookings = await bookingsCollection
+      .find({ studentEmail })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json(bookings);
+  } catch (error) {
+    console.error('Error fetching bookings:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.post('/api/bookings', authenticateToken, async (req, res) => {
+  try {
+    const { tutorId, studentName, phone } = req.body;
+    const studentEmail = req.user.email;
+
+    if (!tutorId || !studentName || !phone) {
+      return res.status(400).json({ message: 'Tutor ID, Student Name, and Phone are required' });
+    }
+
+    if (!ObjectId.isValid(tutorId)) {
+      return res.status(400).json({ message: 'Invalid Tutor ID format' });
+    }
+
+    const tutor = await tutorsCollection.findOne({ _id: new ObjectId(tutorId) });
+    if (!tutor) {
+      return res.status(404).json({ message: 'Tutor not found' });
+    }
+
+    if (tutor.totalSlot <= 0) {
+      return res.status(400).json({
+        message: 'No available slots left.',
+        errorType: 'SLOTS_EMPTY'
+      });
+    }
+
+    const currentDate = new Date();
+    const sessionStartDate = new Date(tutor.sessionStartDate);
+    currentDate.setHours(0, 0, 0, 0);
+    sessionStartDate.setHours(0, 0, 0, 0);
+
+    if (currentDate < sessionStartDate) {
+      return res.status(400).json({
+        message: 'Booking is not available yet for this tutor',
+        errorType: 'DATE_RESTRICTION'
+      });
+    }
+
+    if (tutor.sessionEndDate) {
+      const sessionEndDate = new Date(tutor.sessionEndDate);
+      sessionEndDate.setHours(0, 0, 0, 0);
+      if (currentDate > sessionEndDate) {
+        return res.status(400).json({
+          message: 'The booking window for this tutor has expired',
+          errorType: 'DATE_EXPIRED'
+        });
+      }
+    }
+
+    const existingBooking = await bookingsCollection.findOne({
+      tutorId: tutor._id.toString(),
+      studentEmail,
+      status: 'booked'
+    });
+
+    if (existingBooking) {
+      return res.status(400).json({ message: 'You have already booked a session with this tutor.' });
+    }
+
+    const newBooking = {
+      tutorId: tutor._id.toString(),
+      tutorName: tutor.name,
+      studentName,
+      studentEmail,
+      phone,
+      status: 'booked',
+      createdAt: new Date()
+    };
+
+    const updateResult = await tutorsCollection.updateOne(
+      { _id: tutor._id, totalSlot: { $gt: 0 } },
+      { $inc: { totalSlot: -1 } }
+    );
+
+    if (updateResult.modifiedCount === 0) {
+      return res.status(400).json({
+        message: 'This session is fully booked. You can’t join at the moment.',
+        errorType: 'SLOTS_EMPTY'
+      });
+    }
+
+    const bookingResult = await bookingsCollection.insertOne(newBooking);
+
+    res.status(201).json({
+      message: 'Booking completed successfully!',
+      booking: { _id: bookingResult.insertedId, ...newBooking }
+    });
+  } catch (error) {
+    console.error('Error creating booking:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
