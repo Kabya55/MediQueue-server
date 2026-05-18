@@ -157,6 +157,47 @@ app.get('/api/tutors/:id', async (req, res) => {
   }
 });
 
+app.post('/api/tutors', authenticateToken, async (req, res) => {
+  try {
+    const {
+      name, photoUrl, subject, availableDays, availableTime,
+      hourlyFee, totalSlot, sessionStartDate, institution,
+      experience, location, teachingMode
+    } = req.body;
+
+    if (!name || !photoUrl || !subject || !availableDays || !availableTime || !hourlyFee || !totalSlot || !sessionStartDate || !institution || !experience || !location || !teachingMode) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    const newTutor = {
+      name,
+      photoUrl,
+      subject,
+      availableDays: Array.isArray(availableDays) ? availableDays : [availableDays],
+      availableTime,
+      hourlyFee: parseFloat(hourlyFee),
+      totalSlot: parseInt(totalSlot),
+      sessionStartDate,
+      sessionEndDate: req.body.sessionEndDate || null,
+      institution,
+      experience,
+      location,
+      teachingMode,
+      creatorEmail: req.user.email,
+      createdAt: new Date()
+    };
+
+    const result = await tutorsCollection.insertOne(newTutor);
+    res.status(201).json({
+      message: 'Tutor added successfully!',
+      tutor: { _id: result.insertedId, ...newTutor }
+    });
+  } catch (error) {
+    console.error('Error creating tutor:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 async function run() {
   try {
     await client.connect();
