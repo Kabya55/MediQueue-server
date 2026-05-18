@@ -375,6 +375,50 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
   }
 });
 
+app.patch('/api/bookings/:id/cancel', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Booking ID format' });
+    }
+
+    const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    if (booking.studentEmail !== req.user.email) {
+      return res.status(403).json({ message: 'You are not authorized to cancel this booking' });
+    }
+
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ message: 'This booking is already cancelled' });
+    }
+
+    await bookingsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'cancelled' } }
+    );
+
+    if (ObjectId.isValid(booking.tutorId)) {
+      await tutorsCollection.updateOne(
+        { _id: new ObjectId(booking.tutorId) },
+        { $inc: { totalSlot: 1 } }
+      );
+    }
+
+    res.status(200).json({ message: 'Booking cancelled successfully.' });
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something went wrong on the server!' });
+});
+
 async function run() {
   try {
     await client.connect();
